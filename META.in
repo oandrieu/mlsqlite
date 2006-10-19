@@ -1,0 +1,8 @@
+version = "@VERSION@"
+description = "mlsqlite - bindings for sqlite3"
+archive(byte) = "sqlite3.cma"
+archive(native) = "sqlite3.cmxa"
+
+package "big" (
+  requires = "bigarray mlsqlite"
+)

@@ -22,6 +22,11 @@
    - sqlite3_set_authorizer
 */
 
+/* compatibility for OCaml < 3.10 */
+#ifndef CAMLreturnT
+# define CAMLreturnT(t,e) CAMLreturn(e)
+#endif
+
 
 
 /* Error handling */
@@ -395,7 +400,7 @@ ml_sqlite3_prepare_stmt (value db, value sql, value sql_off, unsigned int *tail_
     }
   if (tail_pos != NULL)
     *tail_pos = tail - String_val (sql);
-  CAMLreturn (stmt);
+  CAMLreturnT (sqlite3_stmt *, stmt);
 }
 
 CAMLprim value
@@ -446,7 +451,7 @@ ml_sqlite3_recompile (value v, sqlite3_stmt *old_stmt)
   s = caml_alloc_small (1, Abstract_tag);
   Field (s, 0) = Val_bp (stmt);
   Store_field (v, 0, s);
-  CAMLreturn (stmt);
+  CAMLreturnT (sqlite3_stmt *, stmt);
 }
 
 CAMLprim value
@@ -703,7 +708,7 @@ register_user_function (struct ml_sqlite3_data *db_data, value name, value cb)
   link->next = db_data->user_functions;
   caml_register_global_root (&link->fun);
   db_data->user_functions = link;
-  CAMLreturn(link);
+  CAMLreturnT(struct user_function *, link);
 }
 
 static void

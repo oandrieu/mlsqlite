@@ -1,5 +1,3 @@
-#define CAML_NAME_SPACE
-
 #include <caml/alloc.h>
 #include <caml/memory.h>
 #include <caml/fail.h>
@@ -86,7 +84,7 @@ ml_sqlite3_column_blob_big (value s, value i)
 {
   CAMLparam1(s);
   CAMLlocal1(r);
-  long len;
+  intnat len;
   const void * data;
   len  = sqlite3_column_bytes (Sqlite3_stmt_val (s), Int_val (i));
   r = alloc_bigarray (BIGARRAY_UINT8 | BIGARRAY_C_LAYOUT, 1, NULL, &len);

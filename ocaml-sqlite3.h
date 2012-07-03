@@ -38,7 +38,7 @@ Sqlite3_val (value v)
 static inline sqlite3_stmt *
 Sqlite3_stmt_val (value v)
 {
-  sqlite3_stmt *stmt = * ((sqlite3_stmt **) Field (v, 0));
+  sqlite3_stmt *stmt = * ((sqlite3_stmt **) v);
   if (stmt == NULL)
     ml_sqlite3_raise_exn (SQLITE_MISUSE, "invalid statement", TRUE);
   return stmt;

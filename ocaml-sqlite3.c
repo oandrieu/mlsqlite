@@ -415,7 +415,7 @@ convert_sqlite3_type (int t)
 CAMLprim value
 ml_sqlite3_finalize_noerr (value s)
 {
-  sqlite3_stmt **p_stmt = (sqlite3_stmt **) Field (s, 0);
+  sqlite3_stmt **p_stmt = (sqlite3_stmt **) s;
 
   if (*p_stmt != NULL)
     {
@@ -433,16 +433,12 @@ ml_sqlite3_prepare_stmt (value db, value sql, value sql_off, unsigned int *tail_
   const char *tail;
   int status;
   unsigned int off = Unsigned_int_val (sql_off);
-  status = sqlite3_prepare (Sqlite3_val (db), 
-			    String_val (sql) + off,
-			    caml_string_length (sql) - off,
-			    &stmt, &tail);
+  status = sqlite3_prepare_v2 (Sqlite3_val (db), 
+                               String_val (sql) + off,
+                               caml_string_length (sql) - off + 1,
+                               &stmt, &tail);
   if (status != SQLITE_OK)
-    {
-      if (stmt != NULL)
-	sqlite3_finalize (stmt);
-      raise_sqlite3_exn (db);
-    }
+    raise_sqlite3_exn (db);
   if (tail_pos != NULL)
     *tail_pos = tail - String_val (sql);
   CAMLreturnT (sqlite3_stmt *, stmt);
@@ -452,7 +448,7 @@ CAMLprim value
 ml_sqlite3_prepare (value db, value sql, value sql_off)
 {
   CAMLparam2(db, sql);
-  CAMLlocal4(t, o, r, s);
+  CAMLlocal3(t, o, s);
   sqlite3_stmt *stmt;
   unsigned int tail_pos;
 
@@ -463,40 +459,13 @@ ml_sqlite3_prepare (value db, value sql, value sql_off)
     {
       s = caml_alloc_small (1, Abstract_tag);
       Field (s, 0) = Val_bp (stmt);
-      r = caml_alloc_small (4, 0);
-      Field (r, 0) = s;
-      Field (r, 1) = db;
-      Field (r, 2) = sql;
-      Field (r, 3) = sql_off;
       o = caml_alloc_small (1, 0);
-      Field (o, 0) = r;
+      Field (o, 0) = s;
     }
   t = caml_alloc_small (2, 0);
   Field (t, 0) = o;
   Field (t, 1) = Val_int (tail_pos);
   CAMLreturn (t);
-}
-
-static sqlite3_stmt *
-ml_sqlite3_recompile (value v, sqlite3_stmt *old_stmt)
-{
-  CAMLparam1(v);
-  CAMLlocal1(s);
-  sqlite3_stmt *stmt;
-
-  stmt = ml_sqlite3_prepare_stmt (Field (v, 1), Field (v, 2), Field (v, 3), NULL);
-  if (stmt == NULL)
-    caml_failwith ("Sqlite3.recompile");
-  if (old_stmt != NULL)
-    {
-      sqlite3_transfer_bindings (old_stmt, stmt);
-      sqlite3_finalize (old_stmt);
-    }
-
-  s = caml_alloc_small (1, Abstract_tag);
-  Field (s, 0) = Val_bp (stmt);
-  Store_field (v, 0, s);
-  CAMLreturnT (sqlite3_stmt *, stmt);
 }
 
 CAMLprim value
@@ -510,7 +479,7 @@ ml_sqlite3_reset (value stmt)
 CAMLprim value
 ml_sqlite3_expired (value stmt)
 {
-  sqlite3_stmt *s = * ((sqlite3_stmt **) Field (stmt, 0));
+  sqlite3_stmt *s = * ((sqlite3_stmt **) stmt);
   return Val_bool (s == NULL);
 }
 
@@ -525,7 +494,6 @@ ml_sqlite3_step (value stmt)
   int status;
   sqlite3_stmt *s = Sqlite3_stmt_val (stmt);
 
- again:
   status = sqlite3_step (s);
   switch (status)
     {
@@ -533,16 +501,9 @@ ml_sqlite3_step (value stmt)
       r = MLTAG_ROW; break;
     case SQLITE_DONE:
       r = MLTAG_DONE; break;
-    default: /* either BUSY, ERROR or MISUSE */
+    default:
       {
 	sqlite3 *db;
-	if (status == SQLITE_ERROR)
-	  status = sqlite3_reset (s);
-	if (status == SQLITE_SCHEMA)
-	  {
-	    s = ml_sqlite3_recompile (stmt, s);
-	    goto again;
-	  }
 	db = sqlite3_db_handle (s);
 	ml_sqlite3_raise_exn (status, sqlite3_errmsg (db), TRUE);
       }
@@ -642,17 +603,6 @@ ml_sqlite3_clear_bindings (value s)
     }
   return Val_unit;
 #endif
-}
-
-CAMLprim value
-ml_sqlite3_transfer_bindings (value s1, value s2)
-{
-  int status;
-  status = sqlite3_transfer_bindings (Sqlite3_stmt_val (s1),
-				      Sqlite3_stmt_val (s2));
-  if (status != SQLITE_OK)
-    ml_sqlite3_raise_exn (status, "transfer_bindings failed", TRUE);
-  return Val_unit;
 }
 
 

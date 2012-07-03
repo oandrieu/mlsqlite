@@ -122,7 +122,6 @@ external bind_parameter_count : stmt -> int = "ml_sqlite3_bind_parameter_count"
 external bind_parameter_index : stmt -> string -> int = "ml_sqlite3_bind_parameter_index"
 external bind_parameter_name  : stmt -> int -> string = "ml_sqlite3_bind_parameter_name"
 external clear_bindings    : stmt -> unit = "ml_sqlite3_clear_bindings"
-external transfer_bindings : stmt -> stmt -> unit = "ml_sqlite3_transfer_bindings"
 
 (** {3 Results} *)
 

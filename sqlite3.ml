@@ -145,13 +145,6 @@ external progress_handler_set : db -> int -> (unit -> unit) -> unit
   = "ml_sqlite3_progress_handler"
 external progress_handler_unset : db -> unit = "ml_sqlite3_progress_handler_unset"
 
-(* type vm *)
-(* type stmt = { *)
-(*     mutable vm : vm ; *)
-(*     db         : db ; *)
-(*     sql        : string ; *)
-(*     sql_off    : int *)
-(*   } *)
 
 external prepare : db -> string -> int -> stmt option * int = "ml_sqlite3_prepare"
 external reset : stmt -> unit = "ml_sqlite3_reset"
@@ -163,7 +156,6 @@ external bind_parameter_count : stmt -> int = "ml_sqlite3_bind_parameter_count"
 external bind_parameter_index : stmt -> string -> int = "ml_sqlite3_bind_parameter_index"
 external bind_parameter_name : stmt -> int -> string = "ml_sqlite3_bind_parameter_name"
 external clear_bindings : stmt -> unit = "ml_sqlite3_clear_bindings"
-external transfer_bindings : stmt -> stmt -> unit = "ml_sqlite3_transfer_bindings"
 
 external column_blob : stmt -> int -> string = "ml_sqlite3_column_blob"
 external column_double : stmt -> int -> float = "ml_sqlite3_column_double"
@@ -222,7 +214,7 @@ let rec _prepare_one db off sql =
       _prepare_one db nxt sql
 
 let prepare_one db sql =
-  _prepare_one db 0 (String.copy sql)
+  _prepare_one db 0 sql
 
 let prepare_one_f db fmt =
   Printf.kprintf (_prepare_one db 0) fmt
@@ -249,8 +241,8 @@ let _fold_prepare ?(final=false) db sql f init =
 	  loop acc nxt in
   loop init 0
 
-let fold_prepare db sql =
-  _fold_prepare db (String.copy sql)
+let fold_prepare db sql f init =
+  _fold_prepare db sql f init
 
 let fold_prepare_f db fmt =
   Printf.kprintf (_fold_prepare db) fmt
@@ -277,8 +269,8 @@ let _fold_prepare_bind ?final db sql bindings f init =
       f acc stmt)
     init
 
-let fold_prepare_bind db sql =
-  _fold_prepare_bind db (String.copy sql)
+let fold_prepare_bind db sql bindings f init =
+  _fold_prepare_bind db sql bindings f init
 
 let fold_prepare_bind_f db fmt =
   Printf.kprintf (_fold_prepare_bind db) fmt
@@ -290,31 +282,25 @@ let rec do_step stmt =
   | `DONE -> ()
   | `ROW  -> do_step stmt
 
-let _exec db sql =
+let exec db sql =
   _fold_prepare
     ~final:true
     db sql
     (fun () stmt -> do_step stmt)
     ()
 
-let exec db sql =
-  _exec db (String.copy sql)
-
 let exec_f db fmt =
-  Printf.kprintf (_exec db) fmt
+  Printf.kprintf (exec db) fmt
 
-let _exec_v db sql data =
+let exec_v db sql data =
   _fold_prepare_bind
     ~final:true
     db sql data 
     (fun () stmt -> do_step stmt)
     ()
 
-let exec_v db sql =
-  _exec_v db (String.copy sql)
-
 let exec_fv db fmt =
-  Printf.kprintf (_exec_v db) fmt
+  Printf.kprintf (exec_v db) fmt
 
 
 
@@ -330,27 +316,21 @@ let rec fold_step f acc stmt =
 	  raise exn in
       fold_step f acc stmt
 
-let _fetch db sql f init =
+let fetch db sql f init =
   _fold_prepare
     db sql
     (fold_step f) init
 
-let fetch db sql =
-  _fetch db (String.copy sql)
-
 let fetch_f db fmt = 
-  Printf.kprintf (_fetch db) fmt
+  Printf.kprintf (fetch db) fmt
 
-let _fetch_v db sql data f init =
+let fetch_v db sql data f init =
   _fold_prepare_bind 
     db sql data
     (fold_step f) init
 
-let fetch_v db sql =
-  _fetch_v db (String.copy sql)
-
 let fetch_fv db fmt = 
-  Printf.kprintf (_fetch_v db) fmt
+  Printf.kprintf (fetch_v db) fmt
 
 
 
@@ -421,9 +401,9 @@ let transaction ?kind db f =
       match kind with
       | None   -> "BEGIN"
       | Some t -> "BEGIN " ^ string_of_transaction t in
-    _exec db sql
+    exec db sql
   end ;
-  try let r = f db in _exec db "COMMIT" ; r
+  try let r = f db in exec db "COMMIT" ; r
   with exn -> 
-    begin try _exec db "ROLLBACK" with _ -> () end ; 
+    begin try exec db "ROLLBACK" with _ -> () end ; 
     raise exn

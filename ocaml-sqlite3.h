@@ -14,16 +14,10 @@ void ml_sqlite3_raise_exn (int, const char *, int) Noreturn;
 # define Pure
 #endif
 
-struct user_function {
-  value fun;
-  struct user_function *next;
-};
-
 struct ml_sqlite3_data {
   sqlite3 *db;
   value  callbacks;
   value  stmt_store;
-  struct user_function *user_functions;
 };
 
 #define Sqlite3_data_val(v)	(* ((struct ml_sqlite3_data **) Data_custom_val(v)))

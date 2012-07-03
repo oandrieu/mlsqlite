@@ -58,6 +58,23 @@ void ml_sqlite3_raise_exn (int status, const char *errmsg, int static_errmsg)
 }
 
 
+static value *
+ml_sqlite3_global_root_new (value v)
+{
+  value *p = caml_stat_alloc (sizeof (value));
+  *p = v;
+  caml_register_global_root (p);
+  return p;
+}
+
+static void
+ml_sqlite3_global_root_destroy (void *data)
+{
+  value *p = data;
+  caml_remove_global_root (p);
+  caml_stat_free (data);
+}
+
 
 
 /* 0 -> busy
@@ -69,18 +86,9 @@ void ml_sqlite3_raise_exn (int status, const char *errmsg, int static_errmsg)
 static void 
 ml_finalize_sqlite3 (value v)
 {
-  struct user_function *list, *next;
   struct ml_sqlite3_data *data = Sqlite3_data_val(v);
   caml_remove_global_root (&data->callbacks);
   caml_remove_global_root (&data->stmt_store);
-  list = data->user_functions;
-  while (list != NULL)
-    {
-      caml_remove_global_root (&list->fun);
-      next = list->next;
-      caml_stat_free (list);
-      list = next;
-    }
   caml_stat_free (data);
 }
 
@@ -105,7 +113,6 @@ ml_wrap_sqlite3 (sqlite3 *db)
   data->db = db;
   data->callbacks = caml_alloc (NUM_CALLBACKS, 0);
   data->stmt_store = Val_unit;
-  data->user_functions = NULL;
   caml_register_global_root (&data->callbacks);
   caml_register_global_root (&data->stmt_store);
   CAMLreturn(v);
@@ -713,46 +720,6 @@ ml_sqlite3_column_decltype (value s, value i)
 
 /* User-defined functions */
 
-static struct user_function *
-register_user_function (struct ml_sqlite3_data *db_data, value name, value cb)
-{
-  CAMLparam2(name, cb);
-  CAMLlocal1(cell);
-  struct user_function *link;
-  cell = caml_alloc (2, 0);
-  Store_field (cell, 0, name);
-  Store_field (cell, 1, cb);
-  link = caml_stat_alloc (sizeof *link);
-  link->fun = cell;
-  link->next = db_data->user_functions;
-  caml_register_global_root (&link->fun);
-  db_data->user_functions = link;
-  CAMLreturnT(struct user_function *, link);
-}
-
-static void
-unregister_user_function (struct ml_sqlite3_data *db_data, value name)
-{
-  struct user_function *prev, *link;
-  prev = NULL;
-  link = db_data->user_functions;
-  while (link != NULL)
-    {
-      if (strcmp (String_val (Field (link->fun, 0)), String_val (name)) == 0)
-	{
-	  if (prev == NULL)
-	    db_data->user_functions = link->next;
-	  else
-	    prev->next = link->next;
-	  caml_remove_global_root (&link->fun);
-	  caml_stat_free (link);
-	  break;
-	}
-      prev = link;
-      link = link->next;
-    }
-}
-
 static value
 ml_sqlite3_wrap_values (int argc, sqlite3_value **args)
 {
@@ -872,12 +839,12 @@ ml_sqlite3_set_result (sqlite3_context *ctx, value res)
 static void
 ml_sqlite3_user_function (sqlite3_context *ctx, int argc, sqlite3_value **argv)
 {
-  struct user_function *data = sqlite3_user_data (ctx);
+  value *fun = sqlite3_user_data (ctx);
   CAMLparam0();
   CAMLlocal2(res, args);
 
   args = ml_sqlite3_wrap_values (argc, argv);
-  res = caml_callback_exn (Field (data->fun, 1), args);
+  res = caml_callback_exn (*fun, args);
   ml_sqlite3_set_result (ctx, res);
   ml_sqlite3_wipe_values (args);
   CAMLreturn0;
@@ -889,17 +856,15 @@ ml_sqlite3_create_function (value db, value name, value nargs, value fun)
   CAMLparam3(db, name, fun);
   int status;
   sqlite3 *s_db = Sqlite3_val(db);
-  struct user_function *param;
+  value *param;
 
-  param = register_user_function (Sqlite3_data_val(db), name, fun);
-  status = sqlite3_create_function (s_db, String_val (name),
-				    Int_val (nargs), SQLITE_UTF8, param,
-				    ml_sqlite3_user_function, NULL, NULL);
+  param = ml_sqlite3_global_root_new(fun);
+  status = sqlite3_create_function_v2 (s_db, String_val (name),
+                                       Int_val (nargs), SQLITE_UTF8, param,
+                                       ml_sqlite3_user_function, NULL, NULL,
+                                       ml_sqlite3_global_root_destroy);
   if (status != SQLITE_OK)
-    {
-      unregister_user_function (Sqlite3_data_val(db), name);
-      raise_sqlite3_exn (db);
-    }
+    raise_sqlite3_exn (db);
   CAMLreturn(Val_unit);
 }
 
@@ -907,12 +872,12 @@ CAMLprim value
 ml_sqlite3_delete_function (value db, value name)
 {
   int status;
-  status = sqlite3_create_function (Sqlite3_val (db), 
-				    String_val (name), 
-				    0, SQLITE_UTF8, NULL, 
-				    NULL, NULL, NULL);
+  sqlite3 *s_db = Sqlite3_val(db);
+  status = sqlite3_create_function_v2 (s_db, String_val (name), 
+                                       0, SQLITE_UTF8, NULL, 
+                                       NULL, NULL, NULL,
+                                       NULL);
   if (status != SQLITE_OK)
     raise_sqlite3_exn (db);
-  unregister_user_function (Sqlite3_data_val(db), name);
   return Val_unit;
 }

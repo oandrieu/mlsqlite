@@ -229,6 +229,25 @@ ml_sqlite3_sleep (value ms)
 #endif
 }
 
+CAMLprim value
+ml_sqlite3_compileoption_get(value i)
+{
+  CAMLparam0();
+  CAMLlocal2(v, s);
+  const char *o;
+  o = sqlite3_compileoption_get(Int_val(i));
+  if (o) {
+    s = caml_copy_string(o);
+    v = caml_alloc_small(1, 0);
+    Field(v, 0) = s;
+  }
+  else {
+    v = Val_long(0);
+  }
+  CAMLreturn(v);
+}
+
+
 
 /* callbacks */
 

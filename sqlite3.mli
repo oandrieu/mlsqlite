@@ -59,6 +59,8 @@ val init : unit
 external open_db : string -> db = "ml_sqlite3_open"
 val close_db : db -> unit
 
+val compileoption_get : unit -> string list
+
 external interrupt : db -> unit = "ml_sqlite3_interrupt"
 external is_complete : string -> bool = "ml_sqlite3_complete"
 external last_insert_rowid : db -> int64 = "ml_sqlite3_last_insert_rowid"

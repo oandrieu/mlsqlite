@@ -115,7 +115,13 @@ let close_db db =
   _close_db db
 
 
-
+external _compileoption_get : int -> string option = "ml_sqlite3_compileoption_get"
+let compileoption_get () =
+  let rec get i =
+    match _compileoption_get i with
+    | Some o -> o :: get (i+1)
+    | None -> [] in
+  get 0
 
 external interrupt : db -> unit = "ml_sqlite3_interrupt"
 external is_complete : string -> bool = "ml_sqlite3_complete"

@@ -92,16 +92,35 @@ ml_finalize_sqlite3 (value v)
   caml_stat_free (data);
 }
 
+static int
+ml_sqlite3_pointer_compare(value v1, value v2)
+{
+  struct ml_sqlite3_data *d1 = Sqlite3_data_val(v1);
+  struct ml_sqlite3_data *d2 = Sqlite3_data_val(v2);
+  return (d1 > d2) - (d1 < d2);
+}
+
+static intnat
+ml_sqlite3_pointer_hash(value v)
+{
+  struct ml_sqlite3_data *d = Sqlite3_data_val(v);
+  return (intnat) d;
+}
+
+
 static value
 ml_wrap_sqlite3 (sqlite3 *db)
 {
   static struct custom_operations ops = {
     "mlsqlite3/001", 
     ml_finalize_sqlite3,
-    custom_compare_default,
-    custom_hash_default,
+    ml_sqlite3_pointer_compare,
+    ml_sqlite3_pointer_hash,
     custom_serialize_default,
-    custom_deserialize_default
+    custom_deserialize_default,
+#ifdef custom_compare_ext_default
+    custom_compare_ext_default
+#endif
   };
   CAMLparam0();
   CAMLlocal1(v);
